@@ -1,0 +1,55 @@
+feature,label,mean_abs_shap
+prev_address_months_count_missing,No previous address recorded,0.74302083
+phone_home_valid,Home phone valid,0.56442976
+has_other_cards,Has other cards,0.5588777
+email_is_free,Free email domain,0.41973856
+housing_status_BA,Housing status = BA,0.34349495
+device_os_windows,Device os = windows,0.31042874
+keep_alive_session,Keep-alive session,0.29000822
+intended_balcon_negative,Intended balance amount is negative,0.28174776
+bank_months_count,Months with previous bank account,0.25157508
+income,Applicant income (percentile),0.23415668
+customer_age,Customer age,0.22119029
+name_email_similarity,Name and email similarity,0.19982146
+payment_type_AC,Payment type = AC,0.19563416
+velocity_4w,Application velocity (4 weeks),0.15952326
+payment_type_AB,Payment type = AB,0.15915096
+device_os_linux,Device os = linux,0.14917566
+bank_months_count_missing,No previous bank account recorded,0.14349912
+device_os_other,Device os = other,0.1407727
+housing_status_BE,Housing status = BE,0.13658787
+employment_status_CA,Employment status = CA,0.13008372
+proposed_credit_limit,Proposed credit limit,0.10497836
+zip_count_4w,Applications from the same zip (4 weeks),0.088458784
+bank_branch_count_8w,Applications at the branch (8 weeks),0.06619539
+employment_status_CB,Employment status = CB,0.064928226
+velocity_6h,Application velocity (6 hours),0.06428355
+intended_balcon_amount,Intended balance transfer amount,0.06323612
+housing_status_BD,Housing status = BD,0.06276589
+payment_type_AD,Payment type = AD,0.06029714
+housing_status_BB,Housing status = BB,0.05595856
+payment_type_AA,Payment type = AA,0.05481104
+employment_status_CD,Employment status = CD,0.048283234
+credit_risk_score,Credit risk score,0.046193603
+velocity_24h,Application velocity (24 hours),0.03780941
+employment_status_CF,Employment status = CF,0.03574199
+session_length_in_minutes,Session length (minutes),0.02901263
+device_os_macintosh,Device os = macintosh,0.028751872
+days_since_request,Days since the request,0.027974753
+housing_status_BC,Housing status = BC,0.027239433
+device_distinct_emails_8w,Distinct emails on the device (8 weeks),0.022639133
+employment_status_CC,Employment status = CC,0.021385986
+date_of_birth_distinct_emails_4w,Emails sharing the date of birth (4 weeks),0.017309094
+phone_mobile_valid,Mobile phone valid,0.01648042
+foreign_request,Request from a foreign country,0.013041667
+employment_status_CE,Employment status = CE,0.012492147
+current_address_months_count,Months at current address,0.010121416
+housing_status_BF,Housing status = BF,0.009601448
+prev_address_months_count,Months at previous address,0.0066042254
+source_TELEAPP,Source = TELEAPP,0.0058929333
+source_INTERNET,Source = INTERNET,0.0058928574
+device_os_x11,Device os = x11,0.0044964836
+employment_status_CG,Employment status = CG,0.0018642793
+payment_type_AE,Payment type = AE,6.756571e-10
+device_fraud_count,Earlier fraud on the device,0.0
+housing_status_BG,Housing status = BG,0.0

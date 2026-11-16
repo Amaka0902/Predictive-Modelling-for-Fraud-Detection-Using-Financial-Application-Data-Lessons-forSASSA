@@ -1,0 +1,7 @@
+model,train_months,validate_month,recall_at_5pct_fpr
+logistic_regression,0-2,3,0.4375
+logistic_regression,0-3,4,0.49382716049382713
+logistic_regression,0-4,5,0.52
+lightgbm,0-2,3,0.5104166666666666
+lightgbm,0-3,4,0.49382716049382713
+lightgbm,0-4,5,0.4

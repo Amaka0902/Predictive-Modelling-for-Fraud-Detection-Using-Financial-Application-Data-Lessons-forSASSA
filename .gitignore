@@ -1,0 +1,10 @@
+Variant*.csv
+Base.csv
+*.parquet
+*.zip
+*.7z
+__pycache__/
+.ipynb_checkpoints/
+venv/
+.venv/
+.env
