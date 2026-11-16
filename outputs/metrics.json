@@ -1,0 +1,43 @@
+{
+  "dataset": "Base.csv",
+  "rows": 60000,
+  "fraud_rate": 0.01115,
+  "train_rows": 33025,
+  "valid_rows": 14756,
+  "test_rows": 12219,
+  "chosen_model": "logistic_regression",
+  "chosen_model_name": "Logistic regression (baseline)",
+  "thresholds": {
+    "high": 0.04117647185921669,
+    "medium": 0.013056380674242973
+  },
+  "brier_test": 0.014068790711462498,
+  "h2": {
+    "chosen": "logistic_regression",
+    "difference": 0.0,
+    "ci_low": 0.0,
+    "ci_high": 0.0,
+    "h0_rejected": false
+  },
+  "fairness": {
+    "ratio": 0.2594507677270864,
+    "ratio_ci": [
+      0.21674215983011283,
+      0.32949968848796
+    ],
+    "ratio_mitigated": 0.8616892911010559,
+    "recall_global_threshold": 0.3224043715846995,
+    "recall_group_thresholds": 0.33879781420765026
+  },
+  "without_age": {
+    "recall_at_5pct_fpr": 0.4262295081967213,
+    "predictive_equality_ratio": 0.37096995472629984,
+    "pr_auc": 0.11640777731063709
+  },
+  "latency": {
+    "median_ms": 83.66545000171755,
+    "p95_ms": 105.85226999392033
+  },
+  "h1_significant": 23,
+  "h1_tested": 30
+}
