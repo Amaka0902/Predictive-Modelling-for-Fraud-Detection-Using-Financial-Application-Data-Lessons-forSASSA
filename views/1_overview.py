@@ -43,6 +43,9 @@ if not metrics:
 
 st.markdown("#### The model at a glance")
 comp = state.load_table("model_comparison.csv")
+if comp is None or comp.empty:
+    st.warning("Missing `outputs/model_comparison.csv`. Commit `outputs/model_comparison.csv` to the repository and reboot the app.")
+    st.stop()
 chosen = comp[comp["model"] == metrics["chosen_model"]].iloc[0]
 k1, k2, k3, k4, k5 = st.columns(5)
 with k1: ui.tile("Chosen model", metrics["chosen_model_name"].split(" (")[0], "picked on validation months", P["lavender"])

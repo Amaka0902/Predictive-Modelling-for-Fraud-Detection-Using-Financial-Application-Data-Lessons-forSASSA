@@ -1,6 +1,7 @@
 """Small helpers shared by the pages: loading the model, running predictions, writing the audit log."""
 import json
 from datetime import datetime
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -10,10 +11,25 @@ import streamlit as st
 import config
 from src import data
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_artifact(base_dir: Path, subdir: str, name: str) -> Path:
+    """Resolve artifact path across config directory and repo-relative fallbacks."""
+    candidates = [
+        Path(base_dir) / name,
+        REPO_ROOT / subdir / name,
+        REPO_ROOT / name,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
 
 @st.cache_resource(show_spinner="Loading the fraud model...")
 def load_model():
-    path = config.MODEL_DIR / "fraud_model.joblib"
+    path = _resolve_artifact(config.MODEL_DIR, "models", "fraud_model.joblib")
     if not path.exists():
         return None
     return joblib.load(path)
@@ -21,13 +37,13 @@ def load_model():
 
 @st.cache_data
 def load_json(name):
-    path = config.OUTPUT_DIR / name
+    path = _resolve_artifact(config.OUTPUT_DIR, "outputs", name)
     return json.loads(path.read_text()) if path.exists() else None
 
 
 @st.cache_data
 def load_table(name):
-    path = config.OUTPUT_DIR / name
+    path = _resolve_artifact(config.OUTPUT_DIR, "outputs", name)
     return pd.read_csv(path) if path.exists() else None
 
 
@@ -53,6 +69,9 @@ def band_income(income):
 def run_predictions(raw, mapping, extras, fill_missing):
     """Build the model input from the mapping, score it, and keep everything in session_state."""
     model = load_model()
+    if model is None:
+        raise FileNotFoundError("fraud_model.joblib was not found in models/ or config.MODEL_DIR.")
+
     frame = pd.DataFrame(index=raw.index)
     for feature in config.REQUIRED_COLUMNS:
         source = mapping.get(feature)
@@ -84,8 +103,9 @@ def run_predictions(raw, mapping, extras, fill_missing):
 
 def write_audit(n, high, version):
     """FR4: every scoring run is written to an audit log."""
-    config.OUTPUT_DIR.mkdir(exist_ok=True)
-    path = config.OUTPUT_DIR / "audit_log.csv"
+    out_dir = _resolve_artifact(config.OUTPUT_DIR, "outputs", "").parent
+    out_dir.mkdir(exist_ok=True)
+    path = out_dir / "audit_log.csv"
     row = pd.DataFrame([{"time": datetime.now().isoformat(timespec="seconds"), "model_version": version,
                          "applications_scored": n, "high_risk": int(high)}])
     row.to_csv(path, mode="a", header=not path.exists(), index=False)
