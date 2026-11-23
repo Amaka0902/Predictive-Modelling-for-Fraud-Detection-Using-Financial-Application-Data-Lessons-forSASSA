@@ -60,7 +60,15 @@ def test_recall_at_fpr():
     rng = np.random.default_rng(0)
     y2 = (rng.random(20000) < 0.1).astype(int)
     assert abs(evaluation.recall_at_fpr(y2, rng.random(20000), 0.05) - 0.05) < 0.02
+    
 
+def test_holm_adjust():
+    p = np.array([0.01, 0.04, 0.03, np.nan])
+    adj = evaluation.holm_adjust(p)
+    # sorted p: 0.01, 0.03, 0.04 with m = 3 -> 0.03, 0.06, 0.06 (running maximum keeps it non-decreasing)
+    assert np.allclose(adj[:3], [0.03, 0.06, 0.06])
+    assert np.isnan(adj[3])
+    
 
 def test_group_thresholds_equalise_fpr():
     rng = np.random.default_rng(1)

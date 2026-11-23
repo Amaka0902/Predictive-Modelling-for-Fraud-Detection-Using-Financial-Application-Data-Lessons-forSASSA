@@ -20,6 +20,8 @@ TEST_MONTHS = [6, 7]
 FPR_HIGH = 0.05
 FPR_MEDIUM = 0.15
 
+N_BOOT = 1000 #bootstrap resample used for every confidence interval 
+
 NUMERIC = [
     "income",
     "name_email_similarity",

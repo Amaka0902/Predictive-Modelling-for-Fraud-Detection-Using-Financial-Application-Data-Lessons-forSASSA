@@ -14,20 +14,33 @@
   "brier_test": 0.014068790711462498,
   "h2": {
     "chosen": "logistic_regression",
-    "difference": 0.0,
-    "ci_low": 0.0,
-    "ci_high": 0.0,
-    "h0_rejected": false
+    "challenger": "hybrid",
+    "challenger_name": "Hybrid (anomaly score + LightGBM)",
+    "difference": -0.016393442622950782,
+    "ci_low": -0.07813816713483146,
+    "ci_high": 0.059224828375286045,
+    "h0_rejected": false,
+    "n_boot": 1000
   },
   "fairness": {
     "ratio": 0.2594507677270864,
     "ratio_ci": [
-      0.21674215983011283,
-      0.32949968848796
+      0.2106783823899053,
+      0.3210452499649798
     ],
     "ratio_mitigated": 0.8616892911010559,
+    "ratio_mitigated_ci": [
+      0.6472655816180645,
+      0.9951283499750748
+    ],
     "recall_global_threshold": 0.3224043715846995,
-    "recall_group_thresholds": 0.33879781420765026
+    "recall_group_thresholds": 0.33879781420765026,
+    "recall_change": 0.016393442622950782,
+    "recall_change_ci": [
+      -0.04023936635743043,
+      0.07066251931141025
+    ],
+    "n_boot": 1000
   },
   "without_age": {
     "recall_at_5pct_fpr": 0.4262295081967213,
@@ -35,9 +48,14 @@
     "pr_auc": 0.11640777731063709
   },
   "latency": {
-    "median_ms": 83.66545000171755,
-    "p95_ms": 105.85226999392033
+    "median_ms": 63.84549994254485,
+    "p95_ms": 117.03540993039496
   },
   "h1_significant": 23,
-  "h1_tested": 30
+  "h1_significant_holm": 21,
+  "h1_tested": 29,
+  "h1_dropped_after_holm": [
+    "velocity_6h",
+    "phone_mobile_valid"
+  ]
 }

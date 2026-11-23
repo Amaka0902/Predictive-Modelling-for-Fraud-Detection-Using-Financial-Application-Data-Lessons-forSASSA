@@ -120,3 +120,19 @@ def confusion_table(y, scores, thresholds):
                      "false_negative": r["fn"], "true_negative": r["tn"],
                      "recall": r["TPR"], "precision": r["precision"], "flagged_share": r["flagged_share"]})
     return pd.DataFrame(rows)
+
+def holm_adjust(p_values):
+    """Holm (1979) step-down adjusted p-values. Controls the family-wise error rate.
+    NaN p-values (a variable that cannot be tested) are left as NaN and not counted."""
+    p = np.asarray(p_values, dtype=float)
+    adjusted = np.full(len(p), np.nan)
+    ok = ~np.isnan(p)
+    m = int(ok.sum())
+    order = np.argsort(p[ok])
+    running = 0.0
+    adj_ok = np.empty(m)
+    for rank, i in enumerate(order):
+        running = max(running, (m - rank) * p[ok][i])   # smallest p is multiplied by m, next by m-1, ...
+        adj_ok[i] = min(1.0, running)
+    adjusted[ok] = adj_ok
+    return adjusted

@@ -47,7 +47,9 @@ def eda_tests(df):
         rows.append({"variable": col, "test": "Chi-square", "statistic": chi2, "p_value": p,
                      "effect_size": cramers_v, "effect_name": "Cramer's V"})
     out = pd.DataFrame(rows).sort_values("effect_size", ascending=False)
-    out["significant_5pct"] = out["p_value"] < 0.05
+    out["significant_5pct"] = out["p_value"] < 0.05                   # unadjusted (the text compares with it)
+    out["p_holm"] = evaluation.holm_adjust(out["p_value"].values)     # Holm-adjusted p (Holm, 1979)
+    out["significant_holm"] = out["p_holm"] < 0.05
     return out
 
 
@@ -81,19 +83,20 @@ def main(path, quick, out_dir, model_dir):
     train, valid, test = data.split_by_month(df)
     log(f"train {len(train):,} | validation {len(valid):,} | test {len(test):,}")
 
-    # ---------- 1. EDA (uses training + validation months only, never the test months)
+    #1. EDA (uses training + validation months only, never the test months)
     eda = eda_tests(pd.concat([train, valid]))
     eda.to_csv(out_dir / "eda_tests.csv", index=False)
     by_month = df.groupby(config.MONTH)[config.TARGET].agg(applications="size", fraud_rate="mean").reset_index()
     by_month.to_csv(out_dir / "fraud_by_month.csv", index=False)
-    log("EDA tests saved. Significant variables: " + str(int(eda["significant_5pct"].sum())) + " of " + str(len(eda)))
+    log(f"EDA tests saved. Significant before Holm: {int(eda['significant_5pct'].sum())}; after Holm: "
+        f"{int(eda['significant_holm'].sum())} of {int(eda['p_value'].notna().sum())} tested")
 
-    # ---------- 2. features
+    #2. features
     Xtr, ytr = data.prepare(train), train[config.TARGET].values
     Xva, yva = data.prepare(valid), valid[config.TARGET].values
     Xte, yte = data.prepare(test), test[config.TARGET].values
 
-    # ---------- 3. LightGBM settings: try a few and keep the best on validation
+    #3. LightGBM settings: try a few and keep the best on validation
     best_params, best_score = None, -1
     for params in modelling.LIGHTGBM_GRID:
         m = modelling.fit_model("lightgbm", Xtr, ytr, params)
@@ -103,7 +106,7 @@ def main(path, quick, out_dir, model_dir):
             best_params, best_score = params, r
     log(f"best LightGBM settings: {best_params}")
 
-    # ---------- 4. train every model, score validation + test
+    #4. train every model, score validation + test
     scorers, val_scores, test_scores = {}, {}, {}
     for name in modelling.MODEL_NAMES:
         log(f"training {name}")
@@ -112,24 +115,24 @@ def main(path, quick, out_dir, model_dir):
         test_scores[name] = scorers[name].score(Xte)
         log(f"   validation recall@5%FPR = {evaluation.recall_at_fpr(yva, val_scores[name]):.3f}")
 
-    # ---------- 5. choose the model on VALIDATION only
+    #5. choose the model on VALIDATION only
     val_recall = {n: evaluation.recall_at_fpr(yva, s) for n, s in val_scores.items()}
     chosen = max(val_recall, key=val_recall.get)
     log(f"chosen model (validation): {chosen}")
 
-    # ---------- 6. calibration + thresholds for the chosen model (validation months)
+    # 6. calibration + thresholds for the chosen model (validation months)
     calibrator = modelling.fit_calibrator(val_scores[chosen], yva)
     cal_val = calibrator.predict(val_scores[chosen])
     thresholds = modelling.make_thresholds(cal_val, yva)
     cal_test = calibrator.predict(test_scores[chosen])
     log(f"thresholds: {thresholds}")
 
-    # ---------- 7. test results for all models (the test months are used once)
+    #7. test results for all models (the test months are used once)
     rows = []
     for name in modelling.MODEL_NAMES:
         thr_valid = evaluation.threshold_at_fpr(yva, val_scores[name], config.FPR_HIGH)
         m = evaluation.full_metrics(yte, test_scores[name], thr_valid)
-        boots = evaluation.bootstrap_recall(yte, test_scores[name], n=100 if quick else 200)
+        boots = evaluation.bootstrap_recall(yte, test_scores[name], n=config.N_BOOT)
         lo, hi = evaluation.ci(boots)
         m.update({"model": name, "model_name": modelling.NICE_NAMES[name],
                   "recall_ci_low": lo, "recall_ci_high": hi, "validation_recall_at_5pct_fpr": val_recall[name]})
@@ -138,10 +141,18 @@ def main(path, quick, out_dir, model_dir):
     comparison = pd.DataFrame(rows)
     comparison.to_csv(out_dir / "model_comparison.csv", index=False)
 
-    # H2: chosen model against the logistic regression baseline (paired bootstrap)
-    diffs = paired_bootstrap(yte, test_scores[chosen], test_scores["logistic_regression"], n=100 if quick else 200)
-    h2 = {"chosen": chosen, "difference": float(np.mean(diffs)), "ci_low": evaluation.ci(diffs)[0],
-          "ci_high": evaluation.ci(diffs)[1], "h0_rejected": bool(evaluation.ci(diffs)[0] > 0)}
+    # H2: the best non-baseline model (picked on VALIDATION months) against the logistic regression baseline.
+    # If the baseline itself were compared with itself the difference would always be 0, so the challenger
+    # is the best of the OTHER models.
+    others = {n: r for n, r in val_recall.items() if n != "logistic_regression"}
+    challenger = max(others, key=others.get)
+    diffs = paired_bootstrap(yte, test_scores[challenger], test_scores["logistic_regression"], n=config.N_BOOT)
+    h2 = {"chosen": chosen, "challenger": challenger, "challenger_name": modelling.NICE_NAMES[challenger],
+          "difference": float(evaluation.recall_at_fpr(yte, test_scores[challenger])
+                              - evaluation.recall_at_fpr(yte, test_scores["logistic_regression"])),
+          "ci_low": evaluation.ci(diffs)[0],
+          "ci_high": evaluation.ci(diffs)[1], "h0_rejected": bool(evaluation.ci(diffs)[0] > 0),
+          "n_boot": config.N_BOOT}
     log(f"H2: recall@5%FPR difference vs baseline = {h2['difference']:.3f}  CI [{h2['ci_low']:.3f}, {h2['ci_high']:.3f}]")
 
     # calibration + top-k for the chosen model
@@ -162,7 +173,7 @@ def main(path, quick, out_dir, model_dir):
         .to_csv(out_dir / "confusion_matrix.csv", index=False)
     log("curves and confusion matrix saved")
 
-    # ---------- 8. fairness by age (chosen model, test months)
+    #8. fairness by age (chosen model, test months)
     g_test = data.age_group(test[config.AGE])
     g_valid = data.age_group(valid[config.AGE])
     rep = fairness.group_report(yte, cal_test, g_test, thresholds["high"])
@@ -170,7 +181,7 @@ def main(path, quick, out_dir, model_dir):
     rep.to_csv(out_dir / "fairness_age.csv", index=False)
     boot_ratio = []
     rng = np.random.default_rng(3)
-    for _ in range(100 if quick else 200):
+    for _ in range(config.N_BOOT):
         idx = rng.integers(0, len(yte), len(yte))
         r = fairness.group_report(yte[idx], cal_test[idx], g_test[idx], thresholds["high"])
         boot_ratio.append(fairness.predictive_equality_ratio(r))
@@ -182,11 +193,24 @@ def main(path, quick, out_dir, model_dir):
     rep_fixed = fairness.group_report(yte, cal_test, g_test, g_thr)
     rep_fixed.to_csv(out_dir / "fairness_age_mitigated.csv", index=False)
     ratio_fixed = fairness.predictive_equality_ratio(rep_fixed)
-    flagged_fixed = np.array([cal_test[i] > g_thr[g_test[i]] for i in range(len(cal_test))]) if quick else \
-        np.where(g_test == "50 and over", cal_test > g_thr["50 and over"], cal_test > g_thr["Under 50"])
-    recall_fixed = float(flagged_fixed[yte == 1].mean())
-    recall_global = float((cal_test[yte == 1] > thresholds["high"]).mean())
-    log(f"mitigation: ratio {ratio:.3f} -> {ratio_fixed:.3f}, recall {recall_global:.3f} -> {recall_fixed:.3f}")
+    flag_global = cal_test > thresholds["high"]
+    flag_group = np.where(g_test == "50 and over", cal_test > g_thr["50 and over"], cal_test > g_thr["Under 50"])
+    recall_global = float(flag_global[yte == 1].mean())
+    recall_fixed = float(flag_group[yte == 1].mean())
+
+    # bootstrap intervals for the post-mitigation ratio and the change in recall (same resamples for both)
+    rng = np.random.default_rng(config.SEED)
+    boot_fixed, boot_change = [], []
+    for _ in range(config.N_BOOT):
+        idx = rng.integers(0, len(yte), len(yte))
+        r = fairness.group_report(yte[idx], cal_test[idx], g_test[idx], g_thr)
+        boot_fixed.append(fairness.predictive_equality_ratio(r))
+        boot_change.append(flag_group[idx][yte[idx] == 1].mean() - flag_global[idx][yte[idx] == 1].mean())
+    ratio_fixed_ci = evaluation.ci(boot_fixed)
+    recall_change = recall_fixed - recall_global
+    recall_change_ci = evaluation.ci(boot_change)
+    log(f"mitigation: ratio {ratio:.3f} -> {ratio_fixed:.3f} CI {ratio_fixed_ci}; "
+        f"recall {recall_global:.3f} -> {recall_fixed:.3f}, change {recall_change:+.3f} CI {recall_change_ci}")
 
     # model without the age column (same settings), to see what age adds
     log("training chosen model type without customer_age")
@@ -201,7 +225,7 @@ def main(path, quick, out_dir, model_dir):
               "pr_auc": evaluation.full_metrics(yte, na_test)["pr_auc"]}
     log(f"without age: {no_age}")
 
-    # ---------- 9. stability over time (expanding window on the training months)
+    #9. stability over time (expanding window on the training months)
     folds = [([0, 1, 2], [3]), ([0, 1, 2, 3], [4]), ([0, 1, 2, 3, 4], [5])]
     stab = []
     for name in ("logistic_regression", "lightgbm"):
@@ -213,7 +237,7 @@ def main(path, quick, out_dir, model_dir):
     pd.DataFrame(stab).to_csv(out_dir / "stability_expanding_window.csv", index=False)
     log("expanding-window stability done")
 
-    # ---------- 10. importance (SHAP on a test sample) and the final object
+    #10. importance (SHAP on a test sample) and the final object
     edges, share = psi_reference(cal_val)
     info = {
         "name": chosen, "nice_name": modelling.NICE_NAMES[chosen], "version": f"1.0-{date.today().isoformat()}",
@@ -233,7 +257,7 @@ def main(path, quick, out_dir, model_dir):
     except Exception as e:           # SHAP should not stop the training
         log(f"SHAP skipped: {e}")
 
-    # speed for one applicant (non-functional requirement NFR1)
+    #speed for one applicant (non-functional requirement NFR1)
     one = test.iloc[[0]]
     fraud_model.predict(one)
     times = []
@@ -252,9 +276,15 @@ def main(path, quick, out_dir, model_dir):
         "chosen_model": chosen, "chosen_model_name": modelling.NICE_NAMES[chosen],
         "thresholds": thresholds, "brier_test": brier_score, "h2": h2,
         "fairness": {"ratio": ratio, "ratio_ci": ratio_ci, "ratio_mitigated": ratio_fixed,
-                     "recall_global_threshold": recall_global, "recall_group_thresholds": recall_fixed},
+                     "ratio_mitigated_ci": ratio_fixed_ci,
+                     "recall_global_threshold": recall_global, "recall_group_thresholds": recall_fixed,
+                     "recall_change": recall_change, "recall_change_ci": recall_change_ci,
+                     "n_boot": config.N_BOOT},
         "without_age": no_age, "latency": latency,
-        "h1_significant": int(eda["significant_5pct"].sum()), "h1_tested": int(len(eda)),
+        "h1_significant": int(eda["significant_5pct"].sum()),
+        "h1_significant_holm": int(eda["significant_holm"].sum()),
+        "h1_tested": int(eda["p_value"].notna().sum()),
+        "h1_dropped_after_holm": eda.loc[eda["significant_5pct"] & ~eda["significant_holm"], "variable"].tolist(),
     }
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
     write_model_card(model_dir / "model_card.md", metrics, comparison, rep)

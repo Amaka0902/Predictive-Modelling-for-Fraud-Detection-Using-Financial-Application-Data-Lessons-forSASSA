@@ -6,7 +6,7 @@ from src import state, ui
 
 P = config.PASTEL
 ui.hero("Fraud Detection Dashboard",
-        "Predictive modelling for fraud detection using financial application data: lessons for the South African Social Security Agency"
+        "Predictive modelling for fraud detection using financial application data: lessons for the South African Social Security Agency "
         "(SASSA)")
 
 col1, col2 = st.columns([3, 2], gap="large")
@@ -69,10 +69,19 @@ with tab1:
     fig.update_layout(title="Fraud caught when only 5% of genuine applicants may be flagged (test months)")
     fig.update_xaxes(tickformat=".0%", range=[0, max(0.7, d["recall_ci_high"].max() + 0.05)])
     st.plotly_chart(ui.style_fig(fig, 340, legend=False), use_container_width=True)
+
+    # H2: best non-baseline model against the logistic regression baseline (paired bootstrap on the test months)
     h2 = metrics["h2"]
-    st.markdown(f"**Hypothesis H2.** The chosen model caught **{h2['difference']:+.1%}** more fraud than the logistic regression "
-                f"baseline (95% CI {h2['ci_low']:+.1%} to {h2['ci_high']:+.1%}). "
-                + ("The null hypothesis is rejected." if h2["h0_rejected"] else "The null hypothesis is not rejected."))
+    diff, lo, hi = h2["difference"] * 100, h2["ci_low"] * 100, h2["ci_high"] * 100
+    challenger = h2.get("challenger_name", metrics["chosen_model_name"])
+    n_boot = h2.get("n_boot", 200)
+    st.markdown(
+        f"**Hypothesis H2.** Recall at 5% FPR for **{challenger}** minus the logistic regression baseline: "
+        f"**{diff:+.1f} percentage points** (95% CI {lo:+.1f} to {hi:+.1f} points, {n_boot:,} paired bootstrap resamples). "
+        + ("The interval is entirely above zero, so the null hypothesis is rejected."
+           if h2["h0_rejected"] else
+           "The interval includes zero, so no difference in recall could be detected and the null hypothesis is not rejected. "
+           "This does not show that the models are equivalent."))
     show = comp[["model_name", "recall_at_5pct_fpr", "pr_auc", "roc_auc", "validation_recall_at_5pct_fpr"]].rename(columns={
         "model_name": "Model", "recall_at_5pct_fpr": "Recall at 5% FPR (test)", "pr_auc": "PR-AUC", "roc_auc": "ROC-AUC",
         "validation_recall_at_5pct_fpr": "Recall at 5% FPR (validation)"})
@@ -173,11 +182,23 @@ with tab2:
     fig.update_layout(barmode="group", title="False positive rate by age group (genuine applicants wrongly flagged)")
     fig.update_yaxes(tickformat=".1%")
     st.plotly_chart(ui.style_fig(fig, 340), use_container_width=True)
+
     f = metrics["fairness"]
-    st.markdown(f"Predictive equality ratio with one threshold: **{f['ratio']:.2f}** (95% CI {f['ratio_ci'][0]:.2f} to {f['ratio_ci'][1]:.2f}). "
-                f"With separate thresholds it becomes **{f['ratio_mitigated']:.2f}**, and the share of fraud caught changes from "
-                f"{f['recall_global_threshold']:.1%} to {f['recall_group_thresholds']:.1%}. Leaving customer age out of the model "
-                f"gives a ratio of {metrics['without_age']['predictive_equality_ratio']:.2f}.")
+    text = (f"Predictive equality ratio with one threshold: **{f['ratio']:.2f}** "
+            f"(95% CI {f['ratio_ci'][0]:.2f} to {f['ratio_ci'][1]:.2f}). ")
+    if "ratio_mitigated_ci" in f:
+        text += (f"With separate thresholds it becomes **{f['ratio_mitigated']:.2f}** "
+                 f"(95% CI {f['ratio_mitigated_ci'][0]:.2f} to {f['ratio_mitigated_ci'][1]:.2f}). "
+                 f"The share of fraud caught changes from {f['recall_global_threshold']:.1%} to {f['recall_group_thresholds']:.1%} "
+                 f"({f['recall_change'] * 100:+.1f} points, 95% CI {f['recall_change_ci'][0] * 100:+.1f} to "
+                 f"{f['recall_change_ci'][1] * 100:+.1f}). ")
+    else:
+        text += (f"With separate thresholds it becomes **{f['ratio_mitigated']:.2f}**, and the share of fraud caught changes from "
+                 f"{f['recall_global_threshold']:.1%} to {f['recall_group_thresholds']:.1%}. ")
+    text += (f"Leaving customer age out of the model gives a ratio of {metrics['without_age']['predictive_equality_ratio']:.2f}.")
+    st.markdown(text)
+    st.caption("The separate-threshold result is exploratory. Its interval is wide, so it shows that the gap can be narrowed "
+               "but not exactly how much recall changes. Using age to set thresholds also needs a legal and policy review before any real use.")
 
 with tab3:
     bm = state.load_table("fraud_by_month.csv")
